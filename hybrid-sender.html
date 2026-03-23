@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>极速传输 - 发送端 (V4 完美重置版)</title>
+    <script src="senderJs/pako.min.js"></script>
+    <script src="senderJs/qrcode.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #121212; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .header { width: 100%; background: #1f1f1f; padding: 20px; text-align: center; border-bottom: 1px solid #333; }
+        #qrcode-container { background: white; padding: 15px; border-radius: 12px; display: none; margin: 20px 0; }
+        #qrcode { width: 85vw !important; height: 85vw !important; max-width: 500px; max-height: 500px; }
+        .panel { width: 100%; max-width: 450px; background: #252525; padding: 15px; border-radius: 12px; border: 1px solid #444; }
+        .btn-group { display: flex; gap: 10px; width: 100%; max-width: 450px; margin-top: 15px; }
+        button { flex: 1; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; border:none; }
+        .btn-start { background: #007bff; color: white; }
+        .btn-stop { background: #dc3545; color: white; display: none; }
+        .tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block; color: #000; }
+        .val { color: #00d2ff; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0">🚀 Air-Gapped Sender</h2>
+    <input type="file" id="fileInput" style="margin-top:15px;" onchange="handleFileSelect()">
+</div>
+
+<div class="main" style="display:flex; flex-direction:column; align-items:center; padding:20px; width:100%;">
+    <div id="qrcode-container">
+        <div id="mode-tag" class="tag" style="background:#ffc107">READY</div>
+        <canvas id="qrcode"></canvas>
+    </div>
+
+    <div id="panel" class="panel" style="display:none">
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>原始大小:</span> <span id="stat-orig" class="val">-</span></div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>压缩后:</span> <span id="stat-comp" class="val">-</span></div>
+        <div style="display:flex; justify-content:space-between"><span>总分片:</span> <span id="stat-k" class="val">-</span></div>
+    </div>
+
+    <div class="btn-group">
+        <button id="startBtn" class="btn-start" onclick="handleStart()" style="display:none">开始传输</button>
+        <button id="stopBtn" class="btn-stop" onclick="handleStop()">停止并重置</button>
+    </div>
+</div>
+
+<script>
+    const CHUNK_SIZE = 220;
+    // 初始状态模板
+    const initialState = { K: 0, chunks: [], meta: null, timer: null, step: 0, running: false };
+    let state = { ...initialState };
+
+    function getIndices(seed, K) {
+        let m = 0x80000000, a = 1103515245, c = 12345, s = seed;
+        const nextInt = () => { s = (a * s + c) % m; return s; };
+        let r = nextInt() / m, d = (r < 1/K) ? 1 : Math.max(1, Math.floor(1/r)); if (d > K) d = K;
+        let idxs = Array.from({length: K}, (_, i) => i);
+        for (let i = K - 1; i > 0; i--) { let j = Math.floor((nextInt() / m) * (i + 1)); [idxs[i], idxs[j]] = [idxs[j], idxs[i]]; }
+        return idxs.slice(0, d);
+    }
+
+    async function handleFileSelect() {
+        // 1. 彻底清除之前的运行状态
+        handleStop();
+        state = { ...initialState, chunks: [] }; // 显式重置所有变量
+
+        const file = document.getElementById('fileInput').files[0];
+        if (!file) return;
+
+        const buf = new Uint8Array(await file.arrayBuffer());
+
+        // 2. 压缩处理
+        const compressed = pako.deflate(buf);
+
+        state.meta = {
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size,
+            cSize: compressed.length
+        };
+
+        state.K = Math.ceil(compressed.length / CHUNK_SIZE);
+        for (let i = 0; i < state.K; i++) {
+            let c = new Uint8Array(CHUNK_SIZE);
+            c.set(compressed.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+            state.chunks.push(c);
+        }
+
+        // UI 更新
+        document.getElementById('stat-orig').innerText = (file.size / 1024).toFixed(2) + " KB";
+        document.getElementById('stat-comp').innerText = (compressed.length / 1024).toFixed(2) + " KB";
+        document.getElementById('stat-k').innerText = state.K;
+        document.getElementById('panel').style.display = 'block';
+        document.getElementById('qrcode-container').style.display = 'block';
+        document.getElementById('startBtn').style.display = 'block';
+        document.getElementById('mode-tag').innerText = "READY";
+        document.getElementById('mode-tag').style.background = "#ffc107";
+
+        // 清屏
+        const canvas = document.getElementById('qrcode');
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function handleStart() {
+        if (state.running || state.chunks.length === 0) return;
+        state.running = true;
+        state.step = 0; // 从元数据帧开始
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'block';
+
+        const canvas = document.getElementById('qrcode');
+        const modeTag = document.getElementById('mode-tag');
+
+        state.timer = setInterval(() => {
+            let id, data, tagTxt, tagBg;
+
+            // 模式切换逻辑
+            if (state.step === 0) {
+                id = -1;
+                data = new TextEncoder().encode(JSON.stringify(state.meta));
+                tagTxt = "META (Info)"; tagBg = "#ffc107";
+            } else if (state.step <= state.K) {
+                id = state.step - 1;
+                data = state.chunks[id];
+                tagTxt = `SEQ ${state.step}/${state.K}`; tagBg = "#28a745";
+            } else {
+                id = state.step + 1000000;
+                const idxs = getIndices(id, state.K);
+                data = new Uint8Array(CHUNK_SIZE);
+                idxs.forEach(idx => { for(let j=0; j<CHUNK_SIZE; j++) data[j] ^= state.chunks[idx][j]; });
+                tagTxt = "FTN (Fountain)"; tagBg = "#6f42c1";
+            }
+
+            const payload = `${id}|${state.K}|${btoa(String.fromCharCode(...data))}`;
+            QRCode.toCanvas(canvas, payload, { margin: 1, width: 600, errorCorrectionLevel: 'L' });
+            modeTag.innerText = tagTxt; modeTag.style.background = tagBg;
+            state.step++;
+        }, 100);
+    }
+
+    function handleStop() {
+        if (state.timer) clearInterval(state.timer);
+        state.timer = null;
+        state.running = false;
+        document.getElementById('startBtn').style.display = state.chunks.length ? 'block' : 'none';
+        document.getElementById('stopBtn').style.display = 'none';
+    }
+</script>
+</body>
+</html>
