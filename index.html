@@ -2,52 +2,52 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>极速传输 - 接收端 (V4 完美重置版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>极速传输 - 接收端 (V8)</title>
     <link rel="manifest" href="manifest.json">
     <script src="receiverJs/pako.min.js"></script>
     <script src="receiverJs/html5-qrcode.min.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // 使用根路径确保能覆盖整个站点的作用域
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW 已注册'))
-                    .catch(err => console.error('SW 注册失败:', err));
-            });
-        }
-    </script>
     <style>
-        body { font-family: 'Segoe UI', system-ui; margin: 0; background: #000; color: white; overflow: hidden; }
-        #reader { width: 100vw; height: 100vh; }
+        :root { --panel-bg: rgba(18, 18, 18, 0.98); --accent-color: #007bff; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0; background: #000; color: white;
+            display: flex; flex-direction: column;
+            height: 100vh; height: 100svh; overflow: hidden;
+        }
+        #reader { flex: 1; width: 100%; background: #000; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
 
-        /* 底部控制台 UI */
         .ui-panel {
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(18, 18, 18, 0.92); padding: 20px; box-sizing: border-box;
-            border-top: 1px solid #333; border-radius: 24px 24px 0 0; z-index: 100;
-            backdrop-filter: blur(10px);
+            width: 100%; background: var(--panel-bg); padding: 24px 20px; box-sizing: border-box;
+            border-top: 1px solid #333; border-radius: 28px 28px 0 0; z-index: 100;
+            backdrop-filter: blur(20px); min-height: 300px;
+            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
         }
 
-        .progress-container { width: 100%; height: 8px; background: #333; border-radius: 4px; margin: 12px 0; overflow: hidden; }
-        #progress-fill { height: 100%; width: 0%; background: #007bff; transition: width 0.3s ease; }
+        .progress-container { width: 100%; height: 8px; background: #222; border-radius: 4px; margin: 15px 0; overflow: hidden; border: 1px solid #333; }
+        #progress-fill { height: 100%; width: 0%; background: var(--accent-color); transition: width 0.3s ease; }
 
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
-        .stat-card { background: #2a2a2a; padding: 10px; border-radius: 10px; text-align: center; border: 1px solid #3d3d3d; }
-        .stat-label { font-size: 10px; color: #888; text-transform: uppercase; margin-bottom: 4px; }
-        .stat-value { font-size: 16px; font-weight: bold; color: #00d2ff; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #1e1e1e; padding: 12px; border-radius: 14px; text-align: center; border: 1px solid #333; }
+        .stat-label { font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 5px; }
+        .stat-value { font-size: 18px; font-weight: bold; color: #00d2ff; }
 
-        .btn-group { display: flex; flex-direction: column; gap: 10px; }
-        #download-btn {
-            display: none; background: #28a745; color: white; text-align: center;
-            padding: 16px; border-radius: 12px; text-decoration: none; font-weight: bold;
-            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        .btn-group { display: flex; flex-direction: column; gap: 12px; }
+
+        /* 按钮通用样式 */
+        .action-btn {
+            display: none; text-align: center; padding: 18px; border-radius: 16px;
+            text-decoration: none; font-weight: bold; font-size: 16px; border: none; cursor: pointer;
         }
-        #reset-btn {
-            display: none; background: #444; color: white; border: none;
-            padding: 12px; border-radius: 12px; font-weight: bold; cursor: pointer;
-        }
-        #file-name-display { font-size: 14px; text-align: center; font-weight: 600; min-height: 1.2em; }
+        #download-btn { background: #28a745; color: white; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); }
+        #pwa-install-btn { background: var(--accent-color); color: white; display: none; margin-bottom: 5px; }
+        #reset-btn { background: #333; color: white; padding: 14px; }
+
+        #file-name-display { font-size: 15px; text-align: center; margin-bottom: 10px; color: #fff; font-weight: 500; }
+        #reader__dashboard, #reader__status_span { display: none !important; }
+        #reader__scan_region { border: none !important; }
     </style>
 </head>
 <body>
@@ -55,43 +55,72 @@
     <div id="reader"></div>
 
     <div class="ui-panel">
-        <div id="file-name-display">正在搜寻二维码...</div>
+        <div id="file-name-display">准备就绪</div>
 
-        <div class="progress-container">
-            <div id="progress-fill"></div>
-        </div>
+        <button id="pwa-install-btn" class="action-btn">✨ 安装极速传输 App</button>
+
+        <div class="progress-container"><div id="progress-fill"></div></div>
 
         <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">已收分片</div>
-                <div id="count-display" class="stat-value">0 / -</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">喷泉池数据</div>
-                <div id="pool-display" class="stat-value">0</div>
-            </div>
+            <div class="stat-card"><div class="stat-label">已收分片</div><div id="count-display" class="stat-value">0 / -</div></div>
+            <div class="stat-card"><div class="stat-label">解码池</div><div id="pool-display" class="stat-value">0</div></div>
         </div>
 
         <div class="btn-group">
-            <a id="download-btn">保存并解压文件</a>
-            <button id="reset-btn" onclick="resetReceiver()">接收新文件</button>
-        </div>
-
-        <div id="status-text" style="text-align:center; font-size:11px; color:#666; margin-top:10px;">
-            支持跨文件自动重置
+            <a id="download-btn" class="action-btn">保存并下载文件</a>
+            <button id="reset-btn" class="action-btn" onclick="resetReceiver()">接收新文件</button>
         </div>
     </div>
 
     <script>
-        // --- 核心解码逻辑 (HybridDecoder) ---
-        function HybridDecoder(K) {
-            this.K = K;
-            this.solvedSymbols = new Array(K).fill(null);
-            this.solvedCount = 0;
-            this.pool = [];
-            this.fileMeta = null;
+        // --- 1. PWA Service Worker 注册 ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('SW Registered');
+                    // 检查更新
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('新内容可用，请刷新');
+                            }
+                        };
+                    };
+                });
+            });
+        }
 
-            // 喷泉码索引生成器
+        // --- 2. PWA 安装引导逻辑 ---
+        let deferredPrompt;
+        const installBtn = document.getElementById('pwa-install-btn');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); // 阻止 Chrome 自动弹出横幅
+            deferredPrompt = e; // 保存事件
+            installBtn.style.display = 'block'; // 显示自定义安装按钮
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt(); // 弹出安装提示
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                console.log('用户接受了安装');
+                installBtn.style.display = 'none';
+            }
+            deferredPrompt = null;
+        });
+
+        window.addEventListener('appinstalled', () => {
+            console.log('应用已安装');
+            installBtn.style.display = 'none';
+        });
+
+        // --- 3. 解码逻辑 (HybridDecoder) ---
+        function HybridDecoder(K) {
+            this.K = K; this.solvedSymbols = new Array(K).fill(null);
+            this.solvedCount = 0; this.pool = []; this.fileMeta = null;
             this.getIndices = (seed) => {
                 let m = 0x80000000, a = 1103515245, c = 12345, s = seed;
                 const nextInt = () => { s = (a * s + c) % m; return s; };
@@ -105,27 +134,21 @@
                 }
                 return indices.slice(0, degree);
             };
-
             this.process = (id, data) => {
-                // 处理元数据帧
                 if (id === -1) {
                     if (!this.fileMeta) {
-                        this.fileMeta = JSON.parse(new TextDecoder().decode(data));
-                        document.getElementById('file-name-display').innerText = "📦 " + this.fileMeta.name;
+                        try {
+                            this.fileMeta = JSON.parse(new TextDecoder().decode(data));
+                            document.getElementById('file-name-display').innerText = "📦 " + this.fileMeta.name;
+                        } catch(e) {}
                     }
                     return false;
                 }
-
-                // 已经解完则跳过
                 if (this.solvedCount >= this.K) return true;
-
-                // 区分原始帧和喷泉帧
                 if (id < 1000000) this.store(id, data);
                 else this.reduce({ indices: this.getIndices(id), data });
-
                 return this.solvedCount >= this.K;
             };
-
             this.reduce = (block) => {
                 for (let i = block.indices.length - 1; i >= 0; i--) {
                     let idx = block.indices[i];
@@ -137,25 +160,18 @@
                 if (block.indices.length === 1) this.store(block.indices[0], block.data);
                 else if (block.indices.length > 1) this.pool.push(block);
             };
-
             this.store = (idx, data) => {
                 if (this.solvedSymbols[idx]) return;
-                this.solvedSymbols[idx] = data;
-                this.solvedCount++;
-                // 触发池内消元
-                for (let i = this.pool.length - 1; i >= 0; i--) {
-                    this.reduce(this.pool.splice(i, 1)[0]);
-                }
+                this.solvedSymbols[idx] = data; this.solvedCount++;
+                for (let i = this.pool.length - 1; i >= 0; i--) this.reduce(this.pool.splice(i, 1)[0]);
             };
-
             this.assemble = () => {
                 if (!this.fileMeta) return null;
-
-                // 1. 还原压缩后的二进制流
                 const cSize = this.fileMeta.cSize;
                 const compressedData = new Uint8Array(cSize);
-                const chunkSize = this.solvedSymbols.find(s => s !== null).length;
-
+                const firstSym = this.solvedSymbols.find(s => s !== null);
+                if (!firstSym) return null;
+                const chunkSize = firstSym.length;
                 for (let i = 0; i < this.K; i++) {
                     if (this.solvedSymbols[i]) {
                         const offset = i * chunkSize;
@@ -163,34 +179,22 @@
                         if (sliceEnd > 0) compressedData.set(this.solvedSymbols[i].slice(0, sliceEnd), offset);
                     }
                 }
-
-                // 2. Pako 解压
-                try {
-                    return pako.inflate(compressedData);
-                } catch (e) {
-                    console.error("解压失败:", e);
-                    throw e;
-                }
+                return pako.inflate(compressedData);
             };
         }
 
-        // --- 全局变量与控制逻辑 ---
-        let decoder = null;
-        let finished = false;
+        let decoder = null; let finished = false;
         const html5QrCode = new Html5Qrcode("reader");
 
-        // 重置接收器
         function resetReceiver() {
             if (decoder && decoder.downloadUrl) URL.revokeObjectURL(decoder.downloadUrl);
-            decoder = null;
-            finished = false;
+            decoder = null; finished = false;
             document.getElementById('file-name-display').innerText = "等待扫描...";
             document.getElementById('progress-fill').style.width = "0%";
             document.getElementById('count-display').innerText = "0 / -";
             document.getElementById('pool-display').innerText = "0";
             document.getElementById('download-btn').style.display = "none";
             document.getElementById('reset-btn').style.display = "none";
-            document.getElementById('status-text').innerText = "准备就绪";
         }
 
         function handleComplete() {
@@ -198,68 +202,45 @@
                 const finalData = decoder.assemble();
                 const blob = new Blob([finalData], { type: decoder.fileMeta.type });
                 decoder.downloadUrl = URL.createObjectURL(blob);
-
                 const btn = document.getElementById('download-btn');
-                btn.href = decoder.downloadUrl;
-                btn.download = decoder.fileMeta.name;
-                btn.style.display = "block";
-
-                document.getElementById('reset-btn').style.display = "block";
-                document.getElementById('status-text').innerText = "✅ 传输并解压成功";
-            } catch (err) {
-                document.getElementById('status-text').innerText = "❌ 解压错误，请检查发送端";
-                document.getElementById('reset-btn').style.display = "block";
-            }
+                btn.href = decoder.downloadUrl; btn.download = decoder.fileMeta.name;
+                btn.style.display = "block"; document.getElementById('reset-btn').style.display = "block";
+            } catch (err) { alert("解析失败"); }
         }
 
         function onScanSuccess(decodedText) {
             if (finished) return;
-
             const parts = decodedText.split('|');
             if (parts.length < 3) return;
-
-            const id = parseInt(parts[0]);
-            const K = parseInt(parts[1]);
-            const b64 = parts[2];
-
-            // 自动重置逻辑：如果 K 变化了，说明发送端切换了新文件
-            if (!decoder || (decoder.K !== K && id === -1)) {
-                console.log("检测到新文件或重新开始，重置解码器");
-                resetReceiver();
-                decoder = new HybridDecoder(K);
-            }
-
-            const binary = atob(b64);
-            const data = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
-
-            if (decoder.process(id, data)) {
-                finished = true;
-                handleComplete();
-            }
-
-            // 更新 UI
-            if (decoder) {
-                document.getElementById('count-display').innerText = `${decoder.solvedCount} / ${decoder.K}`;
-                document.getElementById('pool-display').innerText = decoder.pool.length;
-                document.getElementById('progress-fill').style.width = (decoder.solvedCount / decoder.K * 100) + "%";
-            }
+            const id = parseInt(parts[0]), K = parseInt(parts[1]), b64 = parts[2];
+            if (!decoder || (decoder.K !== K && id === -1)) { resetReceiver(); decoder = new HybridDecoder(K); }
+            try {
+                const binary = atob(b64);
+                const data = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+                if (decoder.process(id, data)) { finished = true; handleComplete(); }
+                if (decoder) {
+                    document.getElementById('count-display').innerText = `${decoder.solvedCount} / ${decoder.K}`;
+                    document.getElementById('pool-display').innerText = decoder.pool.length;
+                    document.getElementById('progress-fill').style.width = (decoder.solvedCount / decoder.K * 100) + "%";
+                }
+            } catch(e) {}
         }
 
-        // 启动扫描（广角配置）
-        const qrBoxSize = Math.floor(window.innerWidth * 0.85);
-        html5QrCode.start(
-            { facingMode: "environment" },
-            {
-                fps: 25,
-                qrbox: qrBoxSize,
-                aspectRatio: 1.0
-            },
-            onScanSuccess
-        ).catch(err => {
-            document.getElementById('file-name-display').innerText = "无法启动摄像头";
-        });
+        async function startScanner() {
+            const readerEl = document.getElementById('reader');
+            let w = readerEl.clientWidth, h = readerEl.clientHeight;
+            if (h < 100) h = window.innerHeight - 300;
+            const qrSize = Math.floor(Math.min(w, h) * 0.7);
+            try {
+                await html5QrCode.start({ facingMode: "environment" }, { fps: 25, qrbox: { width: qrSize, height: qrSize } }, onScanSuccess);
+                const video = readerEl.querySelector('video');
+                if (video) { video.style.position = "absolute"; video.style.objectFit = "cover"; video.style.width = "100%"; video.style.height = "100%"; }
+                document.getElementById('file-name-display').innerText = "等待扫描...";
+            } catch (err) { document.getElementById('file-name-display').innerText = "无法访问摄像头"; }
+        }
 
+        window.addEventListener('load', () => setTimeout(startScanner, 800));
     </script>
 </body>
 </html>
