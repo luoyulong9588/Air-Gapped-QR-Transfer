@@ -4,8 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>极速传输 - 接收端 (V4 完美重置版)</title>
+    <link rel="manifest" href="manifest.json">
     <script src="receiverJs/pako.min.js"></script>
     <script src="receiverJs/html5-qrcode.min.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // 使用根路径确保能覆盖整个站点的作用域
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('SW 已注册'))
+                    .catch(err => console.error('SW 注册失败:', err));
+            });
+        }
+    </script>
     <style>
         body { font-family: 'Segoe UI', system-ui; margin: 0; background: #000; color: white; overflow: hidden; }
         #reader { width: 100vw; height: 100vh; }
