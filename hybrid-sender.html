@@ -2,55 +2,215 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>极速传输 - 发送端 (V4 完美重置版)</title>
-
+    <title>极速摆渡发送端</title>
     <script src="senderJs/pako.min.js"></script>
     <script src="senderJs/qrcode.min.js"></script>
-
     <style>
-        body { font-family: system-ui, sans-serif; background: #121212; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        .header { width: 100%; background: #1f1f1f; padding: 20px; text-align: center; border-bottom: 1px solid #333; }
-        #qrcode-container { background: white; padding: 15px; border-radius: 12px; display: none; margin: 20px 0; }
-        #qrcode { width: 85vw !important; height: 85vw !important; max-width: 500px; max-height: 500px; }
-        .panel { width: 100%; max-width: 450px; background: #252525; padding: 15px; border-radius: 12px; border: 1px solid #444; }
-        .btn-group { display: flex; gap: 10px; width: 100%; max-width: 450px; margin-top: 15px; }
-        button { flex: 1; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; border:none; }
-        .btn-start { background: #007bff; color: white; }
-        .btn-stop { background: #dc3545; color: white; display: none; }
-        .tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; margin-bottom: 10px; display: inline-block; color: #000; }
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1a1a1a;
+            --accent-color: #007AFF;
+            --text-main: #ffffff;
+            --text-dim: #8e8e93;
+            --border-color: #333333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部状态栏 */
+        .header {
+            padding: 15px 25px;
+            background: #1f1f1f;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h2 { margin: 0; font-size: 18px; letter-spacing: -0.5px; }
+
+        /* 主布局：左控制，右显示 */
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左侧面板 */
+        .left-panel {
+            width: 360px;
+            min-width: 360px;
+            background: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        /* 右侧二维码区 */
+        .right-panel {
+            flex: 1;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            position: relative;
+        }
+
+        /* 二维码容器与Canvas */
+        #qrcode-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #qrcode {
+            display: block;
+            width: auto !important;
+            height: auto !important;
+            max-width: 85vw;
+            max-height: 85vh;
+        }
+
+        /* UI 组件样式 */
+        .tabs { display: flex; gap: 8px; }
+        .tab {
+            flex: 1; padding: 10px; background: #333; text-align: center;
+            border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+        }
+        .tab.active { background: var(--accent-color); }
+
+        textarea {
+            width: 100%; height: 120px; background: #111; color: #fff;
+            border: 1px solid var(--border-color); border-radius: 8px;
+            padding: 10px; box-sizing: border-box; resize: none; font-size: 14px;
+        }
+
+        .stat-card {
+            background: #252525; border-radius: 12px; padding: 15px;
+            border: 1px solid var(--border-color);
+        }
+        .stat-line { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
         .val { color: #00d2ff; font-weight: bold; }
+
+        /* 滑块样式 */
+        .range-box { margin-top: 5px; }
+        input[type="range"] {
+            width: 100%; height: 6px; background: #333; border-radius: 5px;
+            outline: none; -webkit-appearance: none; accent-color: var(--accent-color);
+        }
+
+        .btn-group { display: flex; gap: 10px; }
+        .btn-small {
+            flex: 1; padding: 6px; background: #3a3a3c; border: none;
+            border-radius: 6px; color: white; font-size: 12px; cursor: pointer;
+        }
+
+        .btn-main {
+            width: 100%; padding: 16px; border-radius: 12px; border: none;
+            font-size: 16px; font-weight: bold; cursor: pointer; margin-top: auto;
+        }
+        .btn-start { background: var(--accent-color); color: white; }
+        .btn-stop { background: #ff3b30; color: white; display: none; }
+
+        .tag { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: #000; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h2 style="margin:0">🚀 Air-Gapped Sender</h2>
-    <input type="file" id="fileInput" style="margin-top:15px;" onchange="handleFileSelect()">
+    <h2>🚀 Luo-Link Air-Gapped Transfer</h2>
+    <div id="mode-tag" class="tag" style="background:#ffc107; visibility:hidden;">READY</div>
 </div>
 
-<div class="main" style="display:flex; flex-direction:column; align-items:center; padding:20px; width:100%;">
-    <div id="qrcode-container">
-        <div id="mode-tag" class="tag" style="background:#ffc107">READY</div>
-        <canvas id="qrcode"></canvas>
+<div class="main-layout">
+    <div class="left-panel">
+        <div class="tabs">
+            <div id="tab-file" class="tab active" onclick="switchMode('file')">📦 文件模式</div>
+            <div id="tab-text" class="tab" onclick="switchMode('text')">📝 文字模式</div>
+        </div>
+
+        <div id="input-area">
+            <div id="input-file">
+                <input type="file" id="fileInput" onchange="handleDataPrepare()" style="color:var(--text-dim)">
+            </div>
+            <div id="input-text" style="display:none">
+                <textarea id="textInput" placeholder="在此粘贴文字..." oninput="handleDataPrepare()"></textarea>
+            </div>
+        </div>
+
+        <div id="panel" class="stat-card" style="display:none">
+            <div class="stat-line"><span>原始大小:</span> <span id="stat-orig" class="val">-</span></div>
+            <div class="stat-line"><span>压缩后:</span> <span id="stat-comp" class="val">-</span></div>
+            <div class="stat-line"><span>总分片:</span> <span id="stat-k" class="val">-</span></div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-line"><span>二维码缩放:</span> <span id="zoom-val" class="val">80%</span></div>
+            <div class="range-box">
+                <input type="range" id="sizeRange" min="30" max="110" value="80" oninput="updateQRSize(this.value)">
+            </div>
+            <div class="btn-group" style="margin-top:10px;">
+                <button class="btn-small" onclick="adjustSize(-5)">缩小</button>
+                <button class="btn-small" onclick="adjustSize(5)">放大</button>
+                <button class="btn-small" onclick="updateQRSize(100)">1:1</button>
+            </div>
+        </div>
+
+        <button id="startBtn" class="btn-main btn-start" onclick="handleStart()" style="display:none">开始传输</button>
+        <button id="stopBtn" class="btn-main btn-stop" onclick="handleStop()">停止并重置</button>
     </div>
 
-    <div id="panel" class="panel" style="display:none">
-        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>原始大小:</span> <span id="stat-orig" class="val">-</span></div>
-        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>压缩后:</span> <span id="stat-comp" class="val">-</span></div>
-        <div style="display:flex; justify-content:space-between"><span>总分片:</span> <span id="stat-k" class="val">-</span></div>
-    </div>
-
-    <div class="btn-group">
-        <button id="startBtn" class="btn-start" onclick="handleStart()" style="display:none">开始传输</button>
-        <button id="stopBtn" class="btn-stop" onclick="handleStop()">停止并重置</button>
+    <div class="right-panel">
+        <div id="qrcode-container">
+            <canvas id="qrcode"></canvas>
+        </div>
     </div>
 </div>
 
 <script>
     const CHUNK_SIZE = 220;
-    // 初始状态模板
     const initialState = { K: 0, chunks: [], meta: null, timer: null, step: 0, running: false };
     let state = { ...initialState };
+    let currentMode = 'file';
+
+    function updateQRSize(val) {
+        const container = document.getElementById('qrcode-container');
+        document.getElementById('zoom-val').innerText = val + "%";
+        document.getElementById('sizeRange').value = val;
+        // 使用 scale 进行硬件加速缩放，不重绘Canvas，效率最高
+        container.style.transform = `scale(${val / 100})`;
+    }
+
+    function adjustSize(delta) {
+        let newVal = parseInt(document.getElementById('sizeRange').value) + delta;
+        if (newVal >= 30 && newVal <= 110) updateQRSize(newVal);
+    }
+
+    function switchMode(m) {
+        currentMode = m;
+        document.getElementById('tab-file').className = m === 'file' ? 'tab active' : 'tab';
+        document.getElementById('tab-text').className = m === 'text' ? 'tab active' : 'tab';
+        document.getElementById('input-file').style.display = m === 'file' ? 'block' : 'none';
+        document.getElementById('input-text').style.display = m === 'text' ? 'block' : 'none';
+        handleStop();
+        document.getElementById('panel').style.display = 'none';
+        document.getElementById('qrcode-container').style.display = 'none';
+    }
 
     function getIndices(seed, K) {
         let m = 0x80000000, a = 1103515245, c = 12345, s = seed;
@@ -61,26 +221,25 @@
         return idxs.slice(0, d);
     }
 
-    async function handleFileSelect() {
-        // 1. 彻底清除之前的运行状态
+    async function handleDataPrepare() {
         handleStop();
-        state = { ...initialState, chunks: [] }; // 显式重置所有变量
+        state = { ...initialState, chunks: [] };
+        let buf, name, type;
 
-        const file = document.getElementById('fileInput').files[0];
-        if (!file) return;
+        if (currentMode === 'file') {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            buf = new Uint8Array(await file.arrayBuffer());
+            name = file.name; type = file.type || 'application/octet-stream';
+        } else {
+            const text = document.getElementById('textInput').value;
+            if (!text) return;
+            buf = new TextEncoder().encode(text);
+            name = "TEXT_DATA_TYPE"; type = "text/plain";
+        }
 
-        const buf = new Uint8Array(await file.arrayBuffer());
-
-        // 2. 压缩处理
-        const compressed = pako.deflate(buf);
-
-        state.meta = {
-            name: file.name,
-            type: file.type || 'application/octet-stream',
-            size: file.size,
-            cSize: compressed.length
-        };
-
+        const compressed = pako.deflate(buf, { level: 9 });
+        state.meta = { name, type, size: buf.length, cSize: compressed.length };
         state.K = Math.ceil(compressed.length / CHUNK_SIZE);
         for (let i = 0; i < state.K; i++) {
             let c = new Uint8Array(CHUNK_SIZE);
@@ -88,51 +247,38 @@
             state.chunks.push(c);
         }
 
-        // UI 更新
-        document.getElementById('stat-orig').innerText = (file.size / 1024).toFixed(2) + " KB";
+        document.getElementById('stat-orig').innerText = (state.meta.size / 1024).toFixed(2) + " KB";
         document.getElementById('stat-comp').innerText = (compressed.length / 1024).toFixed(2) + " KB";
         document.getElementById('stat-k').innerText = state.K;
         document.getElementById('panel').style.display = 'block';
         document.getElementById('qrcode-container').style.display = 'block';
         document.getElementById('startBtn').style.display = 'block';
-        document.getElementById('mode-tag').innerText = "READY";
-        document.getElementById('mode-tag').style.background = "#ffc107";
-
-        // 清屏
-        const canvas = document.getElementById('qrcode');
-        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('mode-tag').style.visibility = "visible";
     }
 
     function handleStart() {
         if (state.running || state.chunks.length === 0) return;
-        state.running = true;
-        state.step = 0; // 从元数据帧开始
+        state.running = true; state.step = 0;
         document.getElementById('startBtn').style.display = 'none';
         document.getElementById('stopBtn').style.display = 'block';
-
         const canvas = document.getElementById('qrcode');
         const modeTag = document.getElementById('mode-tag');
 
         state.timer = setInterval(() => {
             let id, data, tagTxt, tagBg;
-
-            // 模式切换逻辑
             if (state.step === 0) {
-                id = -1;
-                data = new TextEncoder().encode(JSON.stringify(state.meta));
-                tagTxt = "META (Info)"; tagBg = "#ffc107";
+                id = -1; data = new TextEncoder().encode(JSON.stringify(state.meta));
+                tagTxt = "META"; tagBg = "#ffc107";
             } else if (state.step <= state.K) {
-                id = state.step - 1;
-                data = state.chunks[id];
+                id = state.step - 1; data = state.chunks[id];
                 tagTxt = `SEQ ${state.step}/${state.K}`; tagBg = "#28a745";
             } else {
                 id = state.step + 1000000;
                 const idxs = getIndices(id, state.K);
                 data = new Uint8Array(CHUNK_SIZE);
                 idxs.forEach(idx => { for(let j=0; j<CHUNK_SIZE; j++) data[j] ^= state.chunks[idx][j]; });
-                tagTxt = "FTN (Fountain)"; tagBg = "#6f42c1";
+                tagTxt = "FTN"; tagBg = "#af52de";
             }
-
             const payload = `${id}|${state.K}|${btoa(String.fromCharCode(...data))}`;
             QRCode.toCanvas(canvas, payload, { margin: 1, width: 600, errorCorrectionLevel: 'L' });
             modeTag.innerText = tagTxt; modeTag.style.background = tagBg;
@@ -142,11 +288,15 @@
 
     function handleStop() {
         if (state.timer) clearInterval(state.timer);
-        state.timer = null;
-        state.running = false;
+        state.timer = null; state.running = false;
         document.getElementById('startBtn').style.display = state.chunks.length ? 'block' : 'none';
         document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('mode-tag').innerText = "READY";
+        document.getElementById('mode-tag').style.background = "#ffc107";
     }
+
+    // 初始化缩放
+    updateQRSize(80);
 </script>
 </body>
 </html>

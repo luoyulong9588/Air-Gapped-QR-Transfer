@@ -24,6 +24,7 @@
             backdrop-filter: blur(20px); min-height: 300px;
             padding-bottom: calc(20px + env(safe-area-inset-bottom));
             box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+            overflow-y: auto; /* 允许面板内部滚动 */
         }
 
         .progress-container { width: 100%; height: 8px; background: #222; border-radius: 4px; margin: 15px 0; overflow: hidden; border: 1px solid #333; }
@@ -36,14 +37,22 @@
 
         .btn-group { display: flex; flex-direction: column; gap: 12px; }
 
-        /* 按钮通用样式 */
         .action-btn {
             display: none; text-align: center; padding: 18px; border-radius: 16px;
             text-decoration: none; font-weight: bold; font-size: 16px; border: none; cursor: pointer;
         }
         #download-btn { background: #28a745; color: white; box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3); }
+        #copy-btn { background: #007bff; color: white; box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); }
         #pwa-install-btn { background: var(--accent-color); color: white; display: none; margin-bottom: 5px; }
         #reset-btn { background: #333; color: white; padding: 14px; }
+
+        /* 新增文本复刻区样式 */
+        #text-result-container { display: none; margin-bottom: 15px; }
+        #text-display {
+            width: 100%; height: 100px; background: rgba(255,255,255,0.05); color: #00d2ff;
+            border: 1px solid #444; border-radius: 12px; padding: 12px; font-size: 14px;
+            box-sizing: border-box; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+        }
 
         #file-name-display { font-size: 15px; text-align: center; margin-bottom: 10px; color: #fff; font-weight: 500; }
         #reader__dashboard, #reader__status_span { display: none !important; }
@@ -61,6 +70,10 @@
 
         <div class="progress-container"><div id="progress-fill"></div></div>
 
+        <div id="text-result-container">
+            <div id="text-display"></div>
+        </div>
+
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-label">已收分片</div><div id="count-display" class="stat-value">0 / -</div></div>
             <div class="stat-card"><div class="stat-label">解码池</div><div id="pool-display" class="stat-value">0</div></div>
@@ -68,56 +81,32 @@
 
         <div class="btn-group">
             <a id="download-btn" class="action-btn">保存并下载文件</a>
-            <button id="reset-btn" class="action-btn" onclick="resetReceiver()">接收新文件</button>
+            <button id="copy-btn" class="action-btn" onclick="copyText()">一键复制文字</button>
+            <button id="reset-btn" class="action-btn" onclick="resetReceiver()">接收新任务</button>
         </div>
     </div>
 
     <script>
-        // --- 1. PWA Service Worker 注册 ---
+        // PWA 及 SW 逻辑保持不变...
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').then(reg => {
-                    console.log('SW Registered');
-                    // 检查更新
-                    reg.onupdatefound = () => {
-                        const installingWorker = reg.installing;
-                        installingWorker.onstatechange = () => {
-                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                console.log('新内容可用，请刷新');
-                            }
-                        };
-                    };
-                });
+                navigator.serviceWorker.register('./sw.js').then(reg => { console.log('SW Registered'); });
             });
         }
 
-        // --- 2. PWA 安装引导逻辑 ---
         let deferredPrompt;
         const installBtn = document.getElementById('pwa-install-btn');
-
         window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault(); // 阻止 Chrome 自动弹出横幅
-            deferredPrompt = e; // 保存事件
-            installBtn.style.display = 'block'; // 显示自定义安装按钮
+            e.preventDefault(); deferredPrompt = e; installBtn.style.display = 'block';
         });
-
         installBtn.addEventListener('click', async () => {
-            if (!deferredPrompt) return;
-            deferredPrompt.prompt(); // 弹出安装提示
+            if (!deferredPrompt) return; deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                console.log('用户接受了安装');
-                installBtn.style.display = 'none';
-            }
+            if (outcome === 'accepted') installBtn.style.display = 'none';
             deferredPrompt = null;
         });
 
-        window.addEventListener('appinstalled', () => {
-            console.log('应用已安装');
-            installBtn.style.display = 'none';
-        });
-
-        // --- 3. 解码逻辑 (HybridDecoder) ---
+        // 解码器核心逻辑保持不变
         function HybridDecoder(K) {
             this.K = K; this.solvedSymbols = new Array(K).fill(null);
             this.solvedCount = 0; this.pool = []; this.fileMeta = null;
@@ -139,7 +128,8 @@
                     if (!this.fileMeta) {
                         try {
                             this.fileMeta = JSON.parse(new TextDecoder().decode(data));
-                            document.getElementById('file-name-display').innerText = "📦 " + this.fileMeta.name;
+                            document.getElementById('file-name-display').innerText =
+                                (this.fileMeta.name === "TEXT_DATA_TYPE") ? "📝 收到文字信息" : "📦 " + this.fileMeta.name;
                         } catch(e) {}
                     }
                     return false;
@@ -194,18 +184,38 @@
             document.getElementById('count-display').innerText = "0 / -";
             document.getElementById('pool-display').innerText = "0";
             document.getElementById('download-btn').style.display = "none";
+            document.getElementById('copy-btn').style.display = "none";
             document.getElementById('reset-btn').style.display = "none";
+            document.getElementById('text-result-container').style.display = "none";
+            document.getElementById('text-display').innerText = "";
         }
 
         function handleComplete() {
             try {
                 const finalData = decoder.assemble();
-                const blob = new Blob([finalData], { type: decoder.fileMeta.type });
-                decoder.downloadUrl = URL.createObjectURL(blob);
-                const btn = document.getElementById('download-btn');
-                btn.href = decoder.downloadUrl; btn.download = decoder.fileMeta.name;
-                btn.style.display = "block"; document.getElementById('reset-btn').style.display = "block";
+                if (decoder.fileMeta.name === "TEXT_DATA_TYPE") {
+                    // 文字模式
+                    const text = new TextDecoder().decode(finalData);
+                    document.getElementById('text-display').innerText = text;
+                    document.getElementById('text-result-container').style.display = "block";
+                    document.getElementById('copy-btn').style.display = "block";
+                } else {
+                    // 文件模式
+                    const blob = new Blob([finalData], { type: decoder.fileMeta.type });
+                    decoder.downloadUrl = URL.createObjectURL(blob);
+                    const btn = document.getElementById('download-btn');
+                    btn.href = decoder.downloadUrl; btn.download = decoder.fileMeta.name;
+                    btn.style.display = "block";
+                }
+                document.getElementById('reset-btn').style.display = "block";
             } catch (err) { alert("解析失败"); }
+        }
+
+        function copyText() {
+            const text = document.getElementById('text-display').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("文字已复制到剪贴板");
+            });
         }
 
         function onScanSuccess(decodedText) {
