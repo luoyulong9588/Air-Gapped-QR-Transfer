@@ -1,5 +1,6 @@
 # 🚀 Air-Gapped QR Transfer (V4 Pro) —— 极速二维码断网传输系统
 
+
 这是一个利用高密度二维码感官通道（Optical Channel）实现物理隔离传输的工具。它与 [BlueKey-Trans](https://github.com/luoyulong9588/BlueKey-Trans) 配合使用，解决了内网环境下的双向文件交换难题。
 
 ---
